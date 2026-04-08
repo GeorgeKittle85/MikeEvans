@@ -434,7 +434,8 @@ async function loadAirspaceData() {
   let loaded = 0;
   for (const cls of classes) {
     try {
-      const url = `${FAA_AIRSPACE_URL}/${cls.id}/query?where=1=1&outFields=*&f=geojson&resultRecordCount=5000`;
+      const params = new URLSearchParams({ where: '1=1', outFields: '*', f: 'geojson', resultRecordCount: '5000' });
+      const url = `${FAA_AIRSPACE_URL}/${cls.id}/query?${params.toString()}`;
       const resp = await fetch(url);
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const geojson = await resp.json();
