@@ -8,8 +8,9 @@
 <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.1.2/dist/maplibre-gl.css">
 <script src="https://unpkg.com/maplibre-gl@4.1.2/dist/maplibre-gl.js"></script>
 <script src="https://unpkg.com/@turf/turf@7/turf.min.js"></script>
+<script src="airspace-data.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,600;0,9..40,700;1,9..40,400&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,600;9..40,700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
 <style>
   :root {
     --green: #22c55e;
@@ -25,286 +26,169 @@
     --font: 'DM Sans', sans-serif;
     --mono: 'Space Mono', monospace;
   }
-
-- { margin:0; padding:0; box-sizing:border-box; }
-
-body {
-font-family: var(–font);
-background: var(–bg);
-color: var(–text);
-height: 100dvh;
-width: 100vw;
-overflow: hidden;
-display: flex;
-flex-direction: column;
-}
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    font-family: var(--font);
+    background: var(--bg);
+    color: var(--text);
+    height: 100dvh;
+    width: 100vw;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
 
 /* ── Top Bar ── */
 #topbar {
-display: flex;
-align-items: center;
-justify-content: space-between;
+display: flex; align-items: center; justify-content: space-between;
 padding: 10px 16px;
 background: var(–surface);
 border-bottom: 1px solid rgba(255,255,255,0.06);
-z-index: 20;
-flex-shrink: 0;
+z-index: 20; flex-shrink: 0;
 }
-#topbar .logo {
-font-family: var(–mono);
-font-weight: 700;
-font-size: 18px;
-letter-spacing: -0.5px;
-display: flex;
-align-items: center;
-gap: 8px;
+.logo {
+font-family: var(–mono); font-weight: 700; font-size: 18px;
+letter-spacing: -0.5px; display: flex; align-items: center; gap: 8px;
 }
-#topbar .logo svg { width: 22px; height: 22px; }
-#topbar .tag {
-font-size: 10px;
-font-weight: 600;
-background: var(–accent);
-color: var(–bg);
-padding: 2px 7px;
-border-radius: 6px;
-text-transform: uppercase;
-letter-spacing: 0.5px;
+.logo svg { width: 22px; height: 22px; }
+.tag {
+font-size: 10px; font-weight: 600; background: var(–accent); color: var(–bg);
+padding: 2px 7px; border-radius: 6px; text-transform: uppercase; letter-spacing: 0.5px;
 }
 
 /* ── Map ── */
-#map {
-flex: 1;
-position: relative;
-}
+#map-container { flex: 1; position: relative; }
+#map { width: 100%; height: 100%; }
 
-/* ── Status Card (the traffic light) ── */
+/* ── Status Card ── */
 #status-card {
-position: absolute;
-bottom: 24px;
-left: 50%;
-transform: translateX(-50%);
-z-index: 15;
-width: calc(100% - 32px);
-max-width: 420px;
-background: var(–surface);
-border-radius: var(–radius);
-border: 1px solid rgba(255,255,255,0.08);
-box-shadow: 0 12px 40px rgba(0,0,0,0.5);
-overflow: hidden;
-transition: all 0.3s ease;
+position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
+z-index: 15; width: calc(100% - 32px); max-width: 420px;
+background: var(–surface); border-radius: var(–radius);
+border: 2px solid rgba(255,255,255,0.08);
+box-shadow: 0 12px 40px rgba(0,0,0,0.55);
+overflow: hidden; transition: border-color 0.4s ease;
 }
-#status-card.green  { border-color: var(–green); }
-#status-card.yellow { border-color: var(–yellow); }
-#status-card.red    { border-color: var(–red); }
+#status-card.status-green  { border-color: var(–green); }
+#status-card.status-yellow { border-color: var(–yellow); }
+#status-card.status-red    { border-color: var(–red); }
 
 #status-header {
-display: flex;
-align-items: center;
-gap: 14px;
-padding: 16px 18px;
-cursor: pointer;
+display: flex; align-items: center; gap: 14px;
+padding: 16px 18px; cursor: pointer; user-select: none;
 }
 #status-light {
-width: 48px;
-height: 48px;
-border-radius: 50%;
-flex-shrink: 0;
-display: flex;
-align-items: center;
-justify-content: center;
-font-size: 22px;
-transition: all 0.4s ease;
-animation: pulse-glow 2.5s ease-in-out infinite;
+width: 48px; height: 48px; border-radius: 50%; flex-shrink: 0;
+display: flex; align-items: center; justify-content: center;
+font-size: 22px; transition: all 0.4s ease;
 }
-@keyframes pulse-glow {
-0%, 100% { box-shadow: 0 0 12px rgba(255,255,255,0.1); }
-50% { box-shadow: 0 0 24px rgba(255,255,255,0.2); }
-}
-.green #status-light  { background: var(–green); box-shadow: 0 0 20px rgba(34,197,94,0.4); }
-.yellow #status-light { background: var(–yellow); box-shadow: 0 0 20px rgba(234,179,8,0.4); }
-.red #status-light    { background: var(–red); box-shadow: 0 0 20px rgba(239,68,68,0.4); }
+.status-green  #status-light { background: var(–green); box-shadow: 0 0 20px rgba(34,197,94,0.45); }
+.status-yellow #status-light { background: var(–yellow); box-shadow: 0 0 20px rgba(234,179,8,0.45); }
+.status-red    #status-light { background: var(–red); box-shadow: 0 0 20px rgba(239,68,68,0.45); }
 
-#status-text {
-flex: 1;
-}
-#status-text h2 {
-font-size: 17px;
-font-weight: 700;
-line-height: 1.2;
-margin-bottom: 2px;
-}
-#status-text p {
-font-size: 13px;
-color: var(–text-dim);
-line-height: 1.35;
-}
+#status-text { flex: 1; }
+#status-text h2 { font-size: 17px; font-weight: 700; line-height: 1.2; margin-bottom: 2px; }
+#status-text p { font-size: 13px; color: var(–text-dim); line-height: 1.35; }
 #expand-arrow {
-font-size: 18px;
-color: var(–text-dim);
-transition: transform 0.25s ease;
-flex-shrink: 0;
+font-size: 18px; color: var(–text-dim);
+transition: transform 0.25s ease; flex-shrink: 0;
 }
 #status-card.expanded #expand-arrow { transform: rotate(180deg); }
 
-#status-details {
-max-height: 0;
-overflow: hidden;
-transition: max-height 0.35s ease;
-}
-#status-card.expanded #status-details {
-max-height: 400px;
-}
-#details-inner {
-padding: 0 18px 16px;
-display: flex;
-flex-direction: column;
-gap: 10px;
-}
+#status-details { max-height: 0; overflow: hidden; transition: max-height 0.35s ease; }
+#status-card.expanded #status-details { max-height: 400px; }
+#details-inner { padding: 0 18px 16px; display: flex; flex-direction: column; gap: 8px; }
 .detail-row {
-display: flex;
-justify-content: space-between;
-align-items: center;
-font-size: 13px;
-padding: 8px 12px;
-background: var(–surface2);
-border-radius: 8px;
+display: flex; justify-content: space-between; align-items: center;
+font-size: 13px; padding: 8px 12px; background: var(–surface2); border-radius: 8px;
 }
 .detail-row .label { color: var(–text-dim); }
 .detail-row .value { font-weight: 600; font-family: var(–mono); font-size: 12px; }
 
 /* ── Search ── */
 #search-wrap {
-position: absolute;
-top: 12px;
-left: 12px;
-right: 12px;
-z-index: 15;
-display: flex;
-gap: 8px;
+position: absolute; top: 12px; left: 12px; right: 12px;
+z-index: 15; display: flex; gap: 8px;
 }
 #search-input {
-flex: 1;
-padding: 12px 16px;
-border-radius: 10px;
+flex: 1; padding: 12px 16px; border-radius: 10px;
 border: 1px solid rgba(255,255,255,0.1);
-background: var(–surface);
-color: var(–text);
-font-family: var(–font);
-font-size: 14px;
-outline: none;
+background: var(–surface); color: var(–text);
+font-family: var(–font); font-size: 14px; outline: none;
 transition: border-color 0.2s;
 }
 #search-input::placeholder { color: var(–text-dim); }
 #search-input:focus { border-color: var(–accent); }
 
-#btn-locate {
-width: 46px;
-height: 46px;
-border-radius: 10px;
+.btn-icon {
+width: 46px; height: 46px; border-radius: 10px;
 border: 1px solid rgba(255,255,255,0.1);
-background: var(–surface);
-color: var(–accent);
-font-size: 20px;
-cursor: pointer;
-display: flex;
-align-items: center;
-justify-content: center;
-flex-shrink: 0;
-transition: background 0.2s;
+background: var(–surface); color: var(–accent);
+font-size: 20px; cursor: pointer;
+display: flex; align-items: center; justify-content: center;
+flex-shrink: 0; transition: background 0.2s;
 }
-#btn-locate:hover { background: var(–surface2); }
-#btn-locate:active { transform: scale(0.95); }
+.btn-icon:hover { background: var(–surface2); }
+.btn-icon:active { transform: scale(0.95); }
 
-/* ── Loading State ── */
+/* ── Legend ── */
+#legend-btn {
+position: absolute; top: 70px; right: 12px; z-index: 15;
+width: 36px; height: 36px; border-radius: 8px;
+border: 1px solid rgba(255,255,255,0.1);
+background: var(–surface); color: var(–text);
+font-size: 14px; cursor: pointer;
+display: flex; align-items: center; justify-content: center;
+}
+#legend-panel {
+position: absolute; top: 112px; right: 12px; z-index: 15;
+background: var(–surface); border: 1px solid rgba(255,255,255,0.08);
+border-radius: 10px; padding: 14px; font-size: 12px;
+display: none; min-width: 180px;
+box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+}
+#legend-panel.show { display: block; }
+.legend-item { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; }
+.legend-item:last-child { margin-bottom: 0; }
+.legend-swatch { width: 14px; height: 14px; border-radius: 3px; flex-shrink: 0; border: 1px solid rgba(255,255,255,0.1); }
+
+/* ── Loading ── */
 #loading-overlay {
-position: absolute;
-inset: 0;
-background: var(–bg);
-display: flex;
-flex-direction: column;
-align-items: center;
-justify-content: center;
-z-index: 50;
-transition: opacity 0.5s;
+position: absolute; inset: 0; background: var(–bg);
+display: flex; flex-direction: column; align-items: center; justify-content: center;
+z-index: 50; transition: opacity 0.5s;
 }
 #loading-overlay.hidden { opacity: 0; pointer-events: none; }
 .loader {
-width: 40px; height: 40px;
-border: 3px solid var(–surface2);
-border-top-color: var(–accent);
-border-radius: 50%;
-animation: spin 0.8s linear infinite;
-margin-bottom: 16px;
+width: 40px; height: 40px; border: 3px solid var(–surface2);
+border-top-color: var(–accent); border-radius: 50%;
+animation: spin 0.8s linear infinite; margin-bottom: 16px;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 #loading-overlay p { color: var(–text-dim); font-size: 14px; }
 
-/* ── Legend Toggle ── */
-#legend-btn {
-position: absolute;
-top: 70px;
-right: 12px;
-z-index: 15;
-width: 36px;
-height: 36px;
-border-radius: 8px;
-border: 1px solid rgba(255,255,255,0.1);
-background: var(–surface);
-color: var(–text);
-font-size: 16px;
-cursor: pointer;
-display: flex;
-align-items: center;
-justify-content: center;
+/* ── Disclaimer ── */
+#disclaimer {
+position: absolute; bottom: 160px; left: 50%; transform: translateX(-50%);
+z-index: 14; background: rgba(26,39,54,0.92); border: 1px solid rgba(255,255,255,0.06);
+border-radius: 8px; padding: 8px 14px; font-size: 11px; color: var(–text-dim);
+max-width: 340px; text-align: center; display: none;
+backdrop-filter: blur(6px);
 }
-#legend-panel {
-position: absolute;
-top: 112px;
-right: 12px;
-z-index: 15;
-background: var(–surface);
-border: 1px solid rgba(255,255,255,0.08);
-border-radius: 10px;
-padding: 14px;
-font-size: 12px;
-display: none;
-min-width: 170px;
-box-shadow: 0 8px 24px rgba(0,0,0,0.4);
-}
-#legend-panel.show { display: block; }
-.legend-item {
-display: flex;
-align-items: center;
-gap: 8px;
-margin-bottom: 8px;
-}
-.legend-item:last-child { margin-bottom: 0; }
-.legend-swatch {
-width: 14px;
-height: 14px;
-border-radius: 3px;
-flex-shrink: 0;
+#disclaimer.show { display: block; }
+#disclaimer button {
+background: none; border: none; color: var(–accent); cursor: pointer;
+font-size: 11px; margin-left: 4px; text-decoration: underline;
 }
 
-/* ── Maplibre overrides ── */
+/* Maplibre overrides */
 .maplibregl-ctrl-attrib { font-size: 10px !important; }
-.maplibregl-popup-content {
-background: var(–surface) !important;
-color: var(–text) !important;
-border-radius: 8px !important;
-padding: 10px 14px !important;
-font-family: var(–font) !important;
-font-size: 13px !important;
-box-shadow: 0 4px 16px rgba(0,0,0,0.4) !important;
-border: 1px solid rgba(255,255,255,0.08) !important;
-}
-.maplibregl-popup-tip { border-top-color: var(–surface) !important; }
+.maplibregl-ctrl-group { border-radius: 8px !important; overflow: hidden; }
+.maplibregl-ctrl-group button { width: 34px !important; height: 34px !important; }
 </style>
 
 </head>
 <body>
-
-<!-- Top Bar -->
 
 <div id="topbar">
   <div class="logo">
@@ -319,36 +203,35 @@ border: 1px solid rgba(255,255,255,0.08) !important;
   <span class="tag">RC Airspace</span>
 </div>
 
-<!-- Map Container -->
+<div id="map-container">
+  <div id="map"></div>
 
-<div id="map">
-  <!-- Search -->
   <div id="search-wrap">
-    <input id="search-input" type="text" placeholder="Search location or flying field…" autocomplete="off">
-    <button id="btn-locate" title="Use my location">⦿</button>
+    <input id="search-input" type="text" placeholder="Search a location or flying field…" autocomplete="off">
+    <button class="btn-icon" id="btn-locate" title="Use my location">⦿</button>
   </div>
-
-  <!-- Legend -->
 
 <button id="legend-btn" title="Airspace legend">☰</button>
 
   <div id="legend-panel">
-    <div class="legend-item"><div class="legend-swatch" style="background:rgba(239,68,68,0.45)"></div>Class B (Busiest)</div>
-    <div class="legend-item"><div class="legend-swatch" style="background:rgba(234,179,8,0.4)"></div>Class C (Medium)</div>
-    <div class="legend-item"><div class="legend-swatch" style="background:rgba(139,92,246,0.4)"></div>Class D (Towered)</div>
-    <div class="legend-item"><div class="legend-swatch" style="background:rgba(56,189,248,0.25)"></div>Class E (Surface)</div>
-    <div class="legend-item"><div class="legend-swatch" style="background:rgba(34,197,94,0.15)"></div>Class G (Fly free!)</div>
-    <div class="legend-item"><div class="legend-swatch" style="background:rgba(239,68,68,0.6)"></div>Restricted / TFR</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:rgba(239,68,68,0.5)"></div>Class B (Busiest)</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:rgba(234,179,8,0.45)"></div>Class C (Medium)</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:rgba(168,85,247,0.45)"></div>Class D (Towered)</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:rgba(239,68,68,0.7)"></div>Prohibited / Restricted</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:rgba(34,197,94,0.2);border-color:rgba(34,197,94,0.4)"></div>Class G (Clear to fly)</div>
   </div>
 
-  <!-- Status Card -->
+  <div id="disclaimer">
+    ⚠️ Approximate airspace boundaries. Not for official flight planning. Always verify with FAA B4UFLY or sectional charts.
+    <button onclick="this.parentElement.classList.remove('show')">Dismiss</button>
+  </div>
 
-  <div id="status-card" class="green">
+  <div id="status-card" class="status-green">
     <div id="status-header" onclick="toggleDetails()">
       <div id="status-light">✓</div>
       <div id="status-text">
-        <h2 id="status-title">Checking airspace…</h2>
-        <p id="status-sub">Tap the location button to begin</p>
+        <h2 id="status-title">Tap the map or locate yourself</h2>
+        <p id="status-sub">Check if you can fly RC at any location</p>
       </div>
       <span id="expand-arrow">▾</span>
     </div>
@@ -358,30 +241,205 @@ border: 1px solid rgba(255,255,255,0.08) !important;
         <div class="detail-row"><span class="label">Max Altitude</span><span class="value" id="d-alt">—</span></div>
         <div class="detail-row"><span class="label">Authorization</span><span class="value" id="d-auth">—</span></div>
         <div class="detail-row"><span class="label">Nearest Airport</span><span class="value" id="d-airport">—</span></div>
+        <div class="detail-row"><span class="label">Distance</span><span class="value" id="d-dist">—</span></div>
         <div class="detail-row"><span class="label">Coordinates</span><span class="value" id="d-coords">—</span></div>
       </div>
     </div>
   </div>
 
-  <!-- Loading -->
-
   <div id="loading-overlay">
     <div class="loader"></div>
-    <p>Loading airspace data…</p>
+    <p>Building airspace map…</p>
   </div>
 </div>
 
 <script>
-// ──────────────────────────────────────────
+// ──────────────────────────────────────────────────
 //  ClearSky — RC Airspace Checker
-//  "Like George Kittle finding the open seam,
-//   we find the open airspace." 
-// ──────────────────────────────────────────
+//  Embedded airspace data → Turf.js circle polygons
+//  No external API needed for core functionality
+// ──────────────────────────────────────────────────
 
-const FAA_AIRSPACE_URL = 'https://services6.arcgis.com/ssFJjBXIUyZDrSYZ/arcgis/rest/services/US_Airspace/FeatureServer';
-const LAYER_IDS = { classB: 0, classC: 1, classD: 2, classE: 3 };
+let map, userMarker = null;
+const NM_TO_KM = 1.852;
 
-let map, airspaceData = {}, userMarker = null;
+// Airspace style config
+const AIRSPACE_STYLES = {
+  B: { fill: 'rgba(239,68,68,0.22)', stroke: '#ef4444', strokeW: 2 },
+  C: { fill: 'rgba(234,179,8,0.18)', stroke: '#eab308', strokeW: 1.5 },
+  D: { fill: 'rgba(168,85,247,0.18)', stroke: '#a855f7', strokeW: 1.5 },
+  P: { fill: 'rgba(239,68,68,0.35)', stroke: '#ef4444', strokeW: 2.5 },
+  R: { fill: 'rgba(239,68,68,0.28)', stroke: '#ef4444', strokeW: 2, dash: [4, 3] },
+};
+
+// Pre-built GeoJSON feature collections per class
+const airspaceGeoJSON = {};
+
+function buildAirspacePolygons() {
+  // Group airports by class
+  const groups = {};
+  for (const ap of AIRSPACE_DB) {
+    if (!groups[ap.cls]) groups[ap.cls] = [];
+    // Generate a circle polygon using Turf.js
+    const circle = turf.circle([ap.lng, ap.lat], ap.radiusNm * NM_TO_KM, {
+      steps: 64,
+      units: 'kilometers',
+      properties: { id: ap.id, name: ap.name, cls: ap.cls, radiusNm: ap.radiusNm }
+    });
+    groups[ap.cls].push(circle);
+  }
+
+  // Build FeatureCollections
+  for (const cls of Object.keys(groups)) {
+    airspaceGeoJSON[cls] = turf.featureCollection(groups[cls]);
+  }
+}
+
+function addAirspaceLayers() {
+  // Add in order: largest first (B underneath, D on top)
+  const order = ['B', 'C', 'D', 'R', 'P'];
+  for (const cls of order) {
+    const fc = airspaceGeoJSON[cls];
+    if (!fc) continue;
+    const style = AIRSPACE_STYLES[cls];
+    const srcId = `airspace-${cls}`;
+
+    map.addSource(srcId, { type: 'geojson', data: fc });
+
+    map.addLayer({
+      id: `${srcId}-fill`,
+      type: 'fill',
+      source: srcId,
+      paint: { 'fill-color': style.fill }
+    });
+
+    const linePaint = {
+      'line-color': style.stroke,
+      'line-width': style.strokeW,
+      'line-opacity': 0.7
+    };
+    const lineLayout = {};
+    if (style.dash) lineLayout['line-dasharray'] = style.dash;
+
+    map.addLayer({
+      id: `${srcId}-line`,
+      type: 'line',
+      source: srcId,
+      paint: linePaint,
+      ...(style.dash ? { layout: lineLayout } : {})
+    });
+  }
+}
+
+// ── Check what airspace a point is in ──
+function checkAirspace(lng, lat) {
+  const pt = turf.point([lng, lat]);
+
+  // Check from most restrictive to least
+  const priority = [
+    { cls: 'P', color: 'red', maxAlt: 0, auth: 'Prohibited — no flight allowed' },
+    { cls: 'R', color: 'red', maxAlt: 0, auth: 'Restricted area — check NOTAMs' },
+    { cls: 'B', color: 'red', maxAlt: 0, auth: 'LAANC or FAA DroneZone required' },
+    { cls: 'C', color: 'yellow', maxAlt: 200, auth: 'LAANC authorization recommended' },
+    { cls: 'D', color: 'yellow', maxAlt: 200, auth: 'LAANC authorization recommended' },
+  ];
+
+  for (const chk of priority) {
+    const fc = airspaceGeoJSON[chk.cls];
+    if (!fc) continue;
+    for (const feat of fc.features) {
+      try {
+        if (turf.booleanPointInPolygon(pt, feat)) {
+          return {
+            cls: chk.cls === 'P' ? 'Prohibited' : chk.cls === 'R' ? 'Restricted' : chk.cls,
+            color: chk.color,
+            maxAlt: chk.maxAlt,
+            auth: chk.auth,
+            airport: feat.properties.name || '',
+            airportId: feat.properties.id || '',
+          };
+        }
+      } catch (e) { /* skip bad geom */ }
+    }
+  }
+
+  // Class G — find nearest airport for context
+  let nearest = null, nearestDist = Infinity;
+  for (const ap of AIRSPACE_DB) {
+    const d = turf.distance(pt, turf.point([ap.lng, ap.lat]), { units: 'nauticalmiles' });
+    if (d < nearestDist) { nearestDist = d; nearest = ap; }
+  }
+
+  return {
+    cls: 'G',
+    color: 'green',
+    maxAlt: 400,
+    auth: 'None needed',
+    airport: nearest ? nearest.name : '',
+    airportId: nearest ? nearest.id : '',
+    nearestDist: nearestDist,
+  };
+}
+
+// ── Update Status Card ──
+function updateStatus(result, lat, lng) {
+  const card = document.getElementById('status-card');
+  card.className = `status-${result.color}`;
+
+  const icons = { green: '✓', yellow: '⚠', red: '✕' };
+  const titles = {
+    green: "Clear to fly!",
+    yellow: 'Controlled airspace',
+    red: 'Authorization required'
+  };
+
+  let sub;
+  if (result.color === 'green') {
+    sub = `Class G — fly up to ${result.maxAlt} ft AGL. No authorization needed.`;
+  } else if (result.color === 'yellow') {
+    sub = `Class ${result.cls} near ${result.airport}. Max ${result.maxAlt} ft. Get LAANC auth.`;
+  } else {
+    if (result.cls === 'Prohibited' || result.cls === 'Restricted') {
+      sub = `${result.cls} airspace: ${result.airport}. Do not fly here.`;
+    } else {
+      sub = `Class ${result.cls} — ${result.airport}. ${result.auth}.`;
+    }
+  }
+
+  document.getElementById('status-light').textContent = icons[result.color];
+  document.getElementById('status-title').textContent = titles[result.color];
+  document.getElementById('status-sub').textContent = sub;
+
+  const clsLabel = ['Prohibited','Restricted'].includes(result.cls) ? result.cls : `Class ${result.cls}`;
+  document.getElementById('d-class').textContent = clsLabel;
+  document.getElementById('d-alt').textContent = result.maxAlt === 0 ? 'NO FLY' : `${result.maxAlt} ft AGL`;
+  document.getElementById('d-auth').textContent = result.auth;
+  document.getElementById('d-airport').textContent = result.airport || '—';
+  document.getElementById('d-dist').textContent = result.nearestDist != null
+    ? `${result.nearestDist.toFixed(1)} NM to nearest`
+    : 'Inside airspace';
+  document.getElementById('d-coords').textContent = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+
+  // Show disclaimer on first check
+  document.getElementById('disclaimer').classList.add('show');
+}
+
+function placeMarker(lng, lat) {
+  if (userMarker) userMarker.remove();
+  const el = document.createElement('div');
+  el.style.cssText = `
+    width:18px;height:18px;border-radius:50%;
+    background:#38bdf8;border:3px solid #fff;
+    box-shadow:0 2px 8px rgba(0,0,0,0.5);
+  `;
+  userMarker = new maplibregl.Marker({ element: el }).setLngLat([lng, lat]).addTo(map);
+}
+
+function checkAndUpdate(lng, lat) {
+  placeMarker(lng, lat);
+  const result = checkAirspace(lng, lat);
+  updateStatus(result, lat, lng);
+}
 
 // ── Init Map ──
 function initMap() {
@@ -390,162 +448,41 @@ function initMap() {
     style: {
       version: 8,
       sources: {
-        'osm-tiles': {
+        'osm': {
           type: 'raster',
           tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
           tileSize: 256,
-          attribution: '© OpenStreetMap'
+          attribution: '&copy; <a href="https://openstreetmap.org">OpenStreetMap</a>'
         }
       },
       layers: [{
         id: 'osm-base',
         type: 'raster',
-        source: 'osm-tiles',
+        source: 'osm',
         paint: {
-          'raster-saturation': -0.6,
-          'raster-brightness-min': 0.04,
+          'raster-saturation': -0.55,
+          'raster-brightness-min': 0.05,
           'raster-brightness-max': 0.45,
-          'raster-contrast': 0.1
+          'raster-contrast': 0.08
         }
       }]
     },
-    center: [-98.5, 39.8],
+    center: [-98.5, 39.5],
     zoom: 4,
     maxZoom: 16
   });
 
-  map.addControl(new maplibregl.NavigationControl(), 'top-right');
+  map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
 
   map.on('load', () => {
-    loadAirspaceData();
-    map.on('click', onMapClick);
+    buildAirspacePolygons();
+    addAirspaceLayers();
+    document.getElementById('loading-overlay').classList.add('hidden');
+
+    map.on('click', e => {
+      checkAndUpdate(e.lngLat.lng, e.lngLat.lat);
+    });
   });
-}
-
-// ── Load FAA Airspace from ArcGIS ──
-async function loadAirspaceData() {
-  const classes = [
-    { key: 'classB', id: 0, color: 'rgba(239,68,68,0.3)', outline: '#ef4444', label: 'B' },
-    { key: 'classC', id: 1, color: 'rgba(234,179,8,0.25)', outline: '#eab308', label: 'C' },
-    { key: 'classD', id: 2, color: 'rgba(139,92,246,0.25)', outline: '#8b5cf6', label: 'D' },
-    { key: 'classE', id: 3, color: 'rgba(56,189,248,0.15)', outline: '#38bdf8', label: 'E' },
-  ];
-
-  let loaded = 0;
-  for (const cls of classes) {
-    try {
-      const params = new URLSearchParams({ where: '1=1', outFields: '*', f: 'geojson', resultRecordCount: '5000' });
-      const url = `${FAA_AIRSPACE_URL}/${cls.id}/query?${params.toString()}`;
-      const resp = await fetch(url);
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      const geojson = await resp.json();
-      airspaceData[cls.key] = geojson;
-
-      map.addSource(`airspace-${cls.key}`, { type: 'geojson', data: geojson });
-      map.addLayer({
-        id: `airspace-${cls.key}-fill`,
-        type: 'fill',
-        source: `airspace-${cls.key}`,
-        paint: { 'fill-color': cls.color }
-      });
-      map.addLayer({
-        id: `airspace-${cls.key}-line`,
-        type: 'line',
-        source: `airspace-${cls.key}`,
-        paint: { 'line-color': cls.outline, 'line-width': 1.5, 'line-opacity': 0.6 }
-      });
-    } catch (e) {
-      console.warn(`Could not load Class ${cls.label}:`, e.message);
-    }
-    loaded++;
-    if (loaded === classes.length) hideLoading();
-  }
-  // If all fail, still hide loading
-  hideLoading();
-}
-
-function hideLoading() {
-  document.getElementById('loading-overlay').classList.add('hidden');
-}
-
-// ── Check Airspace at Point ──
-function checkAirspace(lng, lat) {
-  const pt = turf.point([lng, lat]);
-  let result = { cls: 'G', color: 'green', maxAlt: 400, auth: 'None needed', label: '' };
-
-  // Check from most restrictive down
-  const checks = [
-    { key: 'classB', cls: 'B', color: 'red', alt: 0, auth: 'LAANC or DroneZone' },
-    { key: 'classC', cls: 'C', color: 'yellow', alt: 200, auth: 'LAANC recommended' },
-    { key: 'classD', cls: 'D', color: 'yellow', alt: 200, auth: 'LAANC recommended' },
-    { key: 'classE', cls: 'E (sfc)', color: 'yellow', alt: 400, auth: 'Check LAANC grid' },
-  ];
-
-  for (const chk of checks) {
-    const data = airspaceData[chk.key];
-    if (!data || !data.features) continue;
-    for (const feat of data.features) {
-      try {
-        if (turf.booleanPointInPolygon(pt, feat)) {
-          result = { cls: chk.cls, color: chk.color, maxAlt: chk.alt, auth: chk.auth };
-          // Get airport name if available
-          const props = feat.properties || {};
-          result.label = props.NAME || props.IDENT || props.name || props.ident || '';
-          return result; // Return most restrictive match
-        }
-      } catch(e) { /* skip invalid geom */ }
-    }
-  }
-  return result;
-}
-
-// ── Update Status Card ──
-function updateStatus(result, lat, lng) {
-  const card = document.getElementById('status-card');
-  card.className = result.color;
-  if (card.classList.contains('expanded')) card.classList.add('expanded');
-
-  const icons = { green: '✓', yellow: '⚠', red: '✕' };
-  const titles = {
-    green: "You're clear to fly!",
-    yellow: 'Controlled airspace — check rules',
-    red: 'Authorization required'
-  };
-  const subs = {
-    green: `Class G airspace. Fly up to ${result.maxAlt} ft AGL. No authorization needed.`,
-    yellow: `Class ${result.cls} airspace. Max ${result.maxAlt} ft. ${result.auth}.`,
-    red: `Class ${result.cls} airspace. Flight restricted here. ${result.auth}.`
-  };
-
-  document.getElementById('status-light').textContent = icons[result.color];
-  document.getElementById('status-title').textContent = titles[result.color];
-  document.getElementById('status-sub').textContent = subs[result.color];
-
-  document.getElementById('d-class').textContent = `Class ${result.cls}`;
-  document.getElementById('d-alt').textContent = `${result.maxAlt} ft AGL`;
-  document.getElementById('d-auth').textContent = result.auth;
-  document.getElementById('d-airport').textContent = result.label || 'None nearby';
-  document.getElementById('d-coords').textContent = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
-}
-
-// ── Map Click Handler ──
-function onMapClick(e) {
-  const { lng, lat } = e.lngLat;
-  placeMarker(lng, lat);
-  const result = checkAirspace(lng, lat);
-  updateStatus(result, lat, lng);
-}
-
-function placeMarker(lng, lat) {
-  if (userMarker) userMarker.remove();
-
-  const el = document.createElement('div');
-  el.style.cssText = `
-    width:20px;height:20px;border-radius:50%;
-    background:var(--accent);border:3px solid #fff;
-    box-shadow:0 2px 8px rgba(0,0,0,0.4);
-  `;
-  userMarker = new maplibregl.Marker({ element: el }).setLngLat([lng, lat]).addTo(map);
 }
 
 // ── Geolocate ──
@@ -557,50 +494,40 @@ document.getElementById('btn-locate').addEventListener('click', () => {
       pos => {
         const { latitude: lat, longitude: lng } = pos.coords;
         map.flyTo({ center: [lng, lat], zoom: 12, duration: 1500 });
-        placeMarker(lng, lat);
-        const result = checkAirspace(lng, lat);
-        updateStatus(result, lat, lng);
+        setTimeout(() => checkAndUpdate(lng, lat), 300);
         btn.textContent = '⦿';
       },
-      err => {
-        alert('Could not get your location. Make sure location access is enabled.');
-        btn.textContent = '⦿';
-      },
+      () => { alert('Location access denied or unavailable.'); btn.textContent = '⦿'; },
       { enableHighAccuracy: true, timeout: 10000 }
     );
   } else {
-    alert('Geolocation not supported in this browser.');
-    btn.textContent = '⦿';
+    alert('Geolocation not supported.'); btn.textContent = '⦿';
   }
 });
 
-// ── Search (Nominatim) ──
-let searchTimeout;
+// ── Search ──
 document.getElementById('search-input').addEventListener('keydown', e => {
-  if (e.key === 'Enter') {
-    e.preventDefault();
-    doSearch();
-  }
+  if (e.key === 'Enter') { e.preventDefault(); doSearch(); }
 });
 
 async function doSearch() {
   const q = document.getElementById('search-input').value.trim();
   if (!q) return;
   try {
-    const resp = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=1&countrycodes=us`);
+    const resp = await fetch(
+      `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=1&countrycodes=us`,
+      { headers: { 'User-Agent': 'ClearSky-RC-Airspace/1.0' } }
+    );
     const data = await resp.json();
-    if (data.length > 0) {
-      const { lon, lat } = data[0];
-      const lng = parseFloat(lon), la = parseFloat(lat);
-      map.flyTo({ center: [lng, la], zoom: 12, duration: 1500 });
-      placeMarker(lng, la);
-      const result = checkAirspace(lng, la);
-      updateStatus(result, la, lng);
+    if (data.length) {
+      const lng = parseFloat(data[0].lon), lat = parseFloat(data[0].lat);
+      map.flyTo({ center: [lng, lat], zoom: 12, duration: 1500 });
+      setTimeout(() => checkAndUpdate(lng, lat), 300);
     } else {
-      alert('Location not found. Try a city name or address.');
+      alert('Location not found. Try a city or address.');
     }
   } catch (e) {
-    alert('Search failed. Check your connection.');
+    alert('Search failed — check your connection.');
   }
 }
 
@@ -609,12 +536,12 @@ function toggleDetails() {
   document.getElementById('status-card').classList.toggle('expanded');
 }
 
-// ── Legend Toggle ──
+// ── Legend ──
 document.getElementById('legend-btn').addEventListener('click', () => {
   document.getElementById('legend-panel').classList.toggle('show');
 });
 
-// ── Init ──
+// ── Boot ──
 initMap();
 </script>
 
