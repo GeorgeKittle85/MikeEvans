@@ -56,6 +56,30 @@ font-size: 10px; font-weight: 600; background: var(--accent); color: var(--bg);
 padding: 2px 7px; border-radius: 6px; text-transform: uppercase; letter-spacing: 0.5px;
 }
 
+/* ── Data Source Indicator ── */
+#data-source {
+display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-dim);
+}
+.source-dot {
+width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+}
+.source-dot.live {
+background: var(--green); animation: pulse-dot 2s ease-in-out infinite;
+}
+.source-dot.fallback { background: var(--yellow); }
+.source-dot.loading { background: var(--text-dim); animation: pulse-dot 1s ease-in-out infinite; }
+@keyframes pulse-dot {
+0%, 100% { opacity: 1; }
+50% { opacity: 0.3; }
+}
+#refresh-btn {
+background: none; border: none; color: var(--accent); cursor: pointer;
+font-size: 16px; padding: 2px 6px; border-radius: 4px; line-height: 1;
+transition: background 0.2s;
+}
+#refresh-btn:hover { background: var(--surface2); }
+#refresh-btn.spinning { animation: spin 0.8s linear infinite; }
+
 /* ── Map ── */
 #map-container { flex: 1; position: relative; }
 #map { width: 100%; height: 100%; }
@@ -200,6 +224,11 @@ font-size: 11px; margin-left: 4px; text-decoration: underline;
     </svg>
     ClearSky
   </div>
+  <div id="data-source">
+    <span class="source-dot loading" id="source-dot"></span>
+    <span id="source-text">Connecting&hellip;</span>
+    <button id="refresh-btn" title="Refresh airspace data">&circlearrowleft;</button>
+  </div>
   <span class="tag">RC Airspace</span>
 </div>
 
@@ -207,97 +236,200 @@ font-size: 11px; margin-left: 4px; text-decoration: underline;
   <div id="map"></div>
 
   <div id="search-wrap">
-    <input id="search-input" type="text" placeholder="Search a location or flying field…" autocomplete="off">
-    <button class="btn-icon" id="btn-locate" title="Use my location">⦿</button>
+    <input id="search-input" type="text" placeholder="Search a location or flying field&hellip;" autocomplete="off">
+    <button class="btn-icon" id="btn-locate" title="Use my location">&#x29BF;</button>
   </div>
 
-<button id="legend-btn" title="Airspace legend">☰</button>
+<button id="legend-btn" title="Airspace legend">&#9776;</button>
 
   <div id="legend-panel">
     <div class="legend-item"><div class="legend-swatch" style="background:rgba(239,68,68,0.5)"></div>Class B (Busiest)</div>
     <div class="legend-item"><div class="legend-swatch" style="background:rgba(234,179,8,0.45)"></div>Class C (Medium)</div>
     <div class="legend-item"><div class="legend-swatch" style="background:rgba(168,85,247,0.45)"></div>Class D (Towered)</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:rgba(56,189,248,0.35)"></div>Class E (Controlled)</div>
     <div class="legend-item"><div class="legend-swatch" style="background:rgba(239,68,68,0.7)"></div>Prohibited / Restricted</div>
     <div class="legend-item"><div class="legend-swatch" style="background:rgba(34,197,94,0.2);border-color:rgba(34,197,94,0.4)"></div>Class G (Clear to fly)</div>
   </div>
 
   <div id="disclaimer">
-    ⚠️ Approximate airspace boundaries. Not for official flight planning. Always verify with FAA B4UFLY or sectional charts.
+    &#9888;&#65039; Approximate airspace boundaries. Not for official flight planning. Always verify with FAA B4UFLY or sectional charts.
     <button onclick="this.parentElement.classList.remove('show')">Dismiss</button>
   </div>
 
   <div id="status-card" class="status-green">
     <div id="status-header" onclick="toggleDetails()">
-      <div id="status-light">✓</div>
+      <div id="status-light">&#10003;</div>
       <div id="status-text">
         <h2 id="status-title">Tap the map or locate yourself</h2>
         <p id="status-sub">Check if you can fly RC at any location</p>
       </div>
-      <span id="expand-arrow">▾</span>
+      <span id="expand-arrow">&#9662;</span>
     </div>
     <div id="status-details">
       <div id="details-inner">
-        <div class="detail-row"><span class="label">Airspace Class</span><span class="value" id="d-class">—</span></div>
-        <div class="detail-row"><span class="label">Max Altitude</span><span class="value" id="d-alt">—</span></div>
-        <div class="detail-row"><span class="label">Authorization</span><span class="value" id="d-auth">—</span></div>
-        <div class="detail-row"><span class="label">Nearest Airport</span><span class="value" id="d-airport">—</span></div>
-        <div class="detail-row"><span class="label">Distance</span><span class="value" id="d-dist">—</span></div>
-        <div class="detail-row"><span class="label">Coordinates</span><span class="value" id="d-coords">—</span></div>
+        <div class="detail-row"><span class="label">Airspace Class</span><span class="value" id="d-class">&mdash;</span></div>
+        <div class="detail-row"><span class="label">Max Altitude</span><span class="value" id="d-alt">&mdash;</span></div>
+        <div class="detail-row"><span class="label">Authorization</span><span class="value" id="d-auth">&mdash;</span></div>
+        <div class="detail-row"><span class="label">Nearest Airport</span><span class="value" id="d-airport">&mdash;</span></div>
+        <div class="detail-row"><span class="label">Distance</span><span class="value" id="d-dist">&mdash;</span></div>
+        <div class="detail-row"><span class="label">Coordinates</span><span class="value" id="d-coords">&mdash;</span></div>
       </div>
     </div>
   </div>
 
   <div id="loading-overlay">
     <div class="loader"></div>
-    <p>Building airspace map…</p>
+    <p>Fetching FAA airspace data&hellip;</p>
   </div>
 </div>
 
 <script>
 // ──────────────────────────────────────────────────
 //  ClearSky — RC Airspace Checker
-//  Embedded airspace data → Turf.js circle polygons
-//  No external API needed for core functionality
+//  Live FAA airspace data via ArcGIS FeatureServer
+//  Falls back to embedded data if API is unavailable
 // ──────────────────────────────────────────────────
 
 let map, userMarker = null;
 const NM_TO_KM = 1.852;
+
+// FAA ArcGIS REST API
+const FAA_BASE_URL = 'https://services6.arcgis.com/ssFJjBXIUyZDrSYZ/arcgis/rest/services/US_Airspace/FeatureServer';
+const FAA_LAYERS = { B: 0, C: 1, D: 2, E: 3 };
+const REFRESH_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
+let dataSource = 'loading';
+let lastUpdated = null;
+let refreshTimer = null;
 
 // Airspace style config
 const AIRSPACE_STYLES = {
   B: { fill: 'rgba(239,68,68,0.22)', stroke: '#ef4444', strokeW: 2 },
   C: { fill: 'rgba(234,179,8,0.18)', stroke: '#eab308', strokeW: 1.5 },
   D: { fill: 'rgba(168,85,247,0.18)', stroke: '#a855f7', strokeW: 1.5 },
+  E: { fill: 'rgba(56,189,248,0.10)', stroke: '#38bdf8', strokeW: 1 },
   P: { fill: 'rgba(239,68,68,0.35)', stroke: '#ef4444', strokeW: 2.5 },
   R: { fill: 'rgba(239,68,68,0.28)', stroke: '#ef4444', strokeW: 2, dash: [4, 3] },
 };
 
-// Pre-built GeoJSON feature collections per class
+// Airspace GeoJSON feature collections per class
 const airspaceGeoJSON = {};
 
-function buildAirspacePolygons() {
-  // Group airports by class
+// ── FAA Live Data Fetching ──
+
+async function fetchFAALayer(cls, layerId) {
+  const params = new URLSearchParams({
+    where: '1=1',
+    outFields: '*',
+    f: 'geojson',
+    resultRecordCount: '5000'
+  });
+  const url = `${FAA_BASE_URL}/${layerId}/query?${params}`;
+  const resp = await fetch(url);
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+  const data = await resp.json();
+  if (data.error) throw new Error(data.error.message || 'ArcGIS API error');
+  if (data.features) {
+    for (const f of data.features) {
+      f.properties._cls = cls;
+    }
+  }
+  return data;
+}
+
+async function fetchAllFAAData() {
+  const entries = Object.entries(FAA_LAYERS);
+  const results = await Promise.allSettled(
+    entries.map(([cls, layerId]) => fetchFAALayer(cls, layerId))
+  );
+
+  let loaded = 0;
+  for (let i = 0; i < results.length; i++) {
+    const cls = entries[i][0];
+    if (results[i].status === 'fulfilled' && results[i].value.features?.length) {
+      airspaceGeoJSON[cls] = results[i].value;
+      loaded++;
+    }
+  }
+  return loaded;
+}
+
+async function loadAirspaceData() {
+  setDataSourceUI('loading');
+  try {
+    const count = await fetchAllFAAData();
+    if (count === 0) throw new Error('No features returned');
+    dataSource = 'live';
+    lastUpdated = new Date();
+    setDataSourceUI('live');
+    console.log(`[ClearSky] Loaded live FAA data (${count} layers)`);
+    return true;
+  } catch (err) {
+    console.warn('[ClearSky] FAA API unavailable, using fallback:', err.message);
+    buildFallbackPolygons();
+    dataSource = 'fallback';
+    setDataSourceUI('fallback');
+    return false;
+  }
+}
+
+// ── Fallback: build circles from static AIRSPACE_DB ──
+
+function buildFallbackPolygons() {
   const groups = {};
   for (const ap of AIRSPACE_DB) {
     if (!groups[ap.cls]) groups[ap.cls] = [];
-    // Generate a circle polygon using Turf.js
     const circle = turf.circle([ap.lng, ap.lat], ap.radiusNm * NM_TO_KM, {
       steps: 64,
       units: 'kilometers',
-      properties: { id: ap.id, name: ap.name, cls: ap.cls, radiusNm: ap.radiusNm }
+      properties: { NAME: ap.name, IDENT: ap.id, _cls: ap.cls }
     });
     groups[ap.cls].push(circle);
   }
-
-  // Build FeatureCollections
   for (const cls of Object.keys(groups)) {
     airspaceGeoJSON[cls] = turf.featureCollection(groups[cls]);
   }
 }
 
+// ── Data Source UI ──
+
+function setDataSourceUI(status) {
+  const dot = document.getElementById('source-dot');
+  const text = document.getElementById('source-text');
+  dot.className = 'source-dot ' + status;
+  if (status === 'live') {
+    const t = lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    text.textContent = `FAA Live \u00B7 ${t}`;
+  } else if (status === 'fallback') {
+    text.textContent = 'Offline mode';
+  } else {
+    text.textContent = 'Connecting\u2026';
+  }
+}
+
+// ── Refresh airspace data ──
+
+async function refreshAirspaceData() {
+  const btn = document.getElementById('refresh-btn');
+  btn.classList.add('spinning');
+
+  const allClasses = ['E', 'B', 'C', 'D', 'R', 'P'];
+  for (const cls of allClasses) {
+    const srcId = `airspace-${cls}`;
+    if (map.getLayer(`${srcId}-fill`)) map.removeLayer(`${srcId}-fill`);
+    if (map.getLayer(`${srcId}-line`)) map.removeLayer(`${srcId}-line`);
+    if (map.getSource(srcId)) map.removeSource(srcId);
+    delete airspaceGeoJSON[cls];
+  }
+
+  await loadAirspaceData();
+  addAirspaceLayers();
+  btn.classList.remove('spinning');
+}
+
+// ── Add airspace layers to map ──
+
 function addAirspaceLayers() {
-  // Add in order: largest first (B underneath, D on top)
-  const order = ['B', 'C', 'D', 'R', 'P'];
+  const order = ['E', 'B', 'C', 'D', 'R', 'P'];
   for (const cls of order) {
     const fc = airspaceGeoJSON[cls];
     if (!fc) continue;
@@ -332,16 +464,17 @@ function addAirspaceLayers() {
 }
 
 // ── Check what airspace a point is in ──
+
 function checkAirspace(lng, lat) {
   const pt = turf.point([lng, lat]);
 
-  // Check from most restrictive to least
   const priority = [
-    { cls: 'P', color: 'red', maxAlt: 0, auth: 'Prohibited — no flight allowed' },
-    { cls: 'R', color: 'red', maxAlt: 0, auth: 'Restricted area — check NOTAMs' },
+    { cls: 'P', color: 'red', maxAlt: 0, auth: 'Prohibited \u2014 no flight allowed' },
+    { cls: 'R', color: 'red', maxAlt: 0, auth: 'Restricted area \u2014 check NOTAMs' },
     { cls: 'B', color: 'red', maxAlt: 0, auth: 'LAANC or FAA DroneZone required' },
     { cls: 'C', color: 'yellow', maxAlt: 200, auth: 'LAANC authorization recommended' },
     { cls: 'D', color: 'yellow', maxAlt: 200, auth: 'LAANC authorization recommended' },
+    { cls: 'E', color: 'yellow', maxAlt: 400, auth: 'Awareness recommended' },
   ];
 
   for (const chk of priority) {
@@ -350,16 +483,18 @@ function checkAirspace(lng, lat) {
     for (const feat of fc.features) {
       try {
         if (turf.booleanPointInPolygon(pt, feat)) {
+          const name = feat.properties.NAME || feat.properties.name || '';
+          const ident = feat.properties.IDENT || feat.properties.id || '';
           return {
             cls: chk.cls === 'P' ? 'Prohibited' : chk.cls === 'R' ? 'Restricted' : chk.cls,
             color: chk.color,
             maxAlt: chk.maxAlt,
             auth: chk.auth,
-            airport: feat.properties.name || '',
-            airportId: feat.properties.id || '',
+            airport: name,
+            airportId: ident,
           };
         }
-      } catch (e) { /* skip bad geom */ }
+      } catch (e) { /* skip bad geometry */ }
     }
   }
 
@@ -386,7 +521,7 @@ function updateStatus(result, lat, lng) {
   const card = document.getElementById('status-card');
   card.className = `status-${result.color}`;
 
-  const icons = { green: '✓', yellow: '⚠', red: '✕' };
+  const icons = { green: '\u2713', yellow: '\u26A0', red: '\u2715' };
   const titles = {
     green: "Clear to fly!",
     yellow: 'Controlled airspace',
@@ -395,14 +530,14 @@ function updateStatus(result, lat, lng) {
 
   let sub;
   if (result.color === 'green') {
-    sub = `Class G — fly up to ${result.maxAlt} ft AGL. No authorization needed.`;
+    sub = `Class G \u2014 fly up to ${result.maxAlt} ft AGL. No authorization needed.`;
   } else if (result.color === 'yellow') {
     sub = `Class ${result.cls} near ${result.airport}. Max ${result.maxAlt} ft. Get LAANC auth.`;
   } else {
     if (result.cls === 'Prohibited' || result.cls === 'Restricted') {
       sub = `${result.cls} airspace: ${result.airport}. Do not fly here.`;
     } else {
-      sub = `Class ${result.cls} — ${result.airport}. ${result.auth}.`;
+      sub = `Class ${result.cls} \u2014 ${result.airport}. ${result.auth}.`;
     }
   }
 
@@ -414,13 +549,12 @@ function updateStatus(result, lat, lng) {
   document.getElementById('d-class').textContent = clsLabel;
   document.getElementById('d-alt').textContent = result.maxAlt === 0 ? 'NO FLY' : `${result.maxAlt} ft AGL`;
   document.getElementById('d-auth').textContent = result.auth;
-  document.getElementById('d-airport').textContent = result.airport || '—';
+  document.getElementById('d-airport').textContent = result.airport || '\u2014';
   document.getElementById('d-dist').textContent = result.nearestDist != null
     ? `${result.nearestDist.toFixed(1)} NM to nearest`
     : 'Inside airspace';
   document.getElementById('d-coords').textContent = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
 
-  // Show disclaimer on first check
   document.getElementById('disclaimer').classList.add('show');
 }
 
@@ -474,10 +608,13 @@ function initMap() {
 
   map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
 
-  map.on('load', () => {
-    buildAirspacePolygons();
+  map.on('load', async () => {
+    await loadAirspaceData();
     addAirspaceLayers();
     document.getElementById('loading-overlay').classList.add('hidden');
+
+    // Auto-refresh every 30 minutes for live updates
+    refreshTimer = setInterval(refreshAirspaceData, REFRESH_INTERVAL_MS);
 
     map.on('click', e => {
       checkAndUpdate(e.lngLat.lng, e.lngLat.lat);
@@ -488,20 +625,20 @@ function initMap() {
 // ── Geolocate ──
 document.getElementById('btn-locate').addEventListener('click', () => {
   const btn = document.getElementById('btn-locate');
-  btn.textContent = '…';
+  btn.textContent = '\u2026';
   if ('geolocation' in navigator) {
     navigator.geolocation.getCurrentPosition(
       pos => {
         const { latitude: lat, longitude: lng } = pos.coords;
         map.flyTo({ center: [lng, lat], zoom: 12, duration: 1500 });
         setTimeout(() => checkAndUpdate(lng, lat), 300);
-        btn.textContent = '⦿';
+        btn.textContent = '\u29BF';
       },
-      () => { alert('Location access denied or unavailable.'); btn.textContent = '⦿'; },
+      () => { alert('Location access denied or unavailable.'); btn.textContent = '\u29BF'; },
       { enableHighAccuracy: true, timeout: 10000 }
     );
   } else {
-    alert('Geolocation not supported.'); btn.textContent = '⦿';
+    alert('Geolocation not supported.'); btn.textContent = '\u29BF';
   }
 });
 
@@ -527,7 +664,7 @@ async function doSearch() {
       alert('Location not found. Try a city or address.');
     }
   } catch (e) {
-    alert('Search failed — check your connection.');
+    alert('Search failed \u2014 check your connection.');
   }
 }
 
@@ -539,6 +676,11 @@ function toggleDetails() {
 // ── Legend ──
 document.getElementById('legend-btn').addEventListener('click', () => {
   document.getElementById('legend-panel').classList.toggle('show');
+});
+
+// ── Refresh Button ──
+document.getElementById('refresh-btn').addEventListener('click', () => {
+  refreshAirspaceData();
 });
 
 // ── Boot ──
