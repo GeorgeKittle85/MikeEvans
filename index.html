@@ -181,6 +181,19 @@ background: none; border: none; color: var(--accent); cursor: pointer;
 font-size: 11px; margin-left: 4px; text-decoration: underline;
 }
 
+/* ── Data Source Indicator ── */
+#data-source {
+position: absolute; top: 70px; left: 12px; z-index: 15;
+display: flex; align-items: center; gap: 6px;
+background: var(--surface); border: 1px solid rgba(255,255,255,0.1);
+border-radius: 8px; padding: 5px 10px; font-size: 11px; color: var(--text-dim);
+}
+#data-source .dot {
+width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+}
+#data-source .dot.live { background: var(--green); box-shadow: 0 0 6px rgba(34,197,94,0.5); }
+#data-source .dot.offline { background: var(--yellow); }
+
 /* Maplibre overrides */
 .maplibregl-ctrl-attrib { font-size: 10px !important; }
 .maplibregl-ctrl-group { border-radius: 8px !important; overflow: hidden; }
@@ -213,10 +226,16 @@ font-size: 11px; margin-left: 4px; text-decoration: underline;
 
 <button id="legend-btn" title="Airspace legend">☰</button>
 
+  <div id="data-source">
+    <span class="dot offline"></span>
+    <span id="data-source-text">Offline data</span>
+  </div>
+
   <div id="legend-panel">
     <div class="legend-item"><div class="legend-swatch" style="background:rgba(239,68,68,0.5)"></div>Class B (Busiest)</div>
     <div class="legend-item"><div class="legend-swatch" style="background:rgba(234,179,8,0.45)"></div>Class C (Medium)</div>
     <div class="legend-item"><div class="legend-swatch" style="background:rgba(168,85,247,0.45)"></div>Class D (Towered)</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:rgba(56,189,248,0.25)"></div>Class E (Surface)</div>
     <div class="legend-item"><div class="legend-swatch" style="background:rgba(239,68,68,0.7)"></div>Prohibited / Restricted</div>
     <div class="legend-item"><div class="legend-swatch" style="background:rgba(34,197,94,0.2);border-color:rgba(34,197,94,0.4)"></div>Class G (Clear to fly)</div>
   </div>
@@ -249,18 +268,27 @@ font-size: 11px; margin-left: 4px; text-decoration: underline;
 
   <div id="loading-overlay">
     <div class="loader"></div>
-    <p>Building airspace map…</p>
+    <p>Loading airspace data…</p>
   </div>
 </div>
 
 <script>
 // ──────────────────────────────────────────────────
 //  ClearSky — RC Airspace Checker
-//  Embedded airspace data → Turf.js circle polygons
-//  No external API needed for core functionality
+//  Live FAA airspace data with static fallback
 // ──────────────────────────────────────────────────
 
+const FAA_AIRSPACE_URL = 'https://services6.arcgis.com/ssFJjBXIUyZDrSYZ/arcgis/rest/services/US_Airspace/FeatureServer';
+const FAA_CLASSES = [
+  { cls: 'B', layerId: 0 },
+  { cls: 'C', layerId: 1 },
+  { cls: 'D', layerId: 2 },
+  { cls: 'E', layerId: 3 },
+];
+const REFRESH_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
+
 let map, userMarker = null;
+let liveDataLoaded = false;
 const NM_TO_KM = 1.852;
 
 // Airspace style config
@@ -268,6 +296,7 @@ const AIRSPACE_STYLES = {
   B: { fill: 'rgba(239,68,68,0.22)', stroke: '#ef4444', strokeW: 2 },
   C: { fill: 'rgba(234,179,8,0.18)', stroke: '#eab308', strokeW: 1.5 },
   D: { fill: 'rgba(168,85,247,0.18)', stroke: '#a855f7', strokeW: 1.5 },
+  E: { fill: 'rgba(56,189,248,0.15)', stroke: '#38bdf8', strokeW: 1.2 },
   P: { fill: 'rgba(239,68,68,0.35)', stroke: '#ef4444', strokeW: 2.5 },
   R: { fill: 'rgba(239,68,68,0.28)', stroke: '#ef4444', strokeW: 2, dash: [4, 3] },
 };
@@ -296,8 +325,8 @@ function buildAirspacePolygons() {
 }
 
 function addAirspaceLayers() {
-  // Add in order: largest first (B underneath, D on top)
-  const order = ['B', 'C', 'D', 'R', 'P'];
+  // Add in order: largest first (E underneath, P on top)
+  const order = ['E', 'B', 'C', 'D', 'R', 'P'];
   for (const cls of order) {
     const fc = airspaceGeoJSON[cls];
     if (!fc) continue;
@@ -342,6 +371,7 @@ function checkAirspace(lng, lat) {
     { cls: 'B', color: 'red', maxAlt: 0, auth: 'LAANC or FAA DroneZone required' },
     { cls: 'C', color: 'yellow', maxAlt: 200, auth: 'LAANC authorization recommended' },
     { cls: 'D', color: 'yellow', maxAlt: 200, auth: 'LAANC authorization recommended' },
+    { cls: 'E', color: 'yellow', maxAlt: 400, auth: 'Class E surface — check LAANC grid' },
   ];
 
   for (const chk of priority) {
@@ -441,6 +471,76 @@ function checkAndUpdate(lng, lat) {
   updateStatus(result, lat, lng);
 }
 
+// ── Load live FAA airspace data ──
+async function loadFAAData() {
+  let successCount = 0;
+  for (const { cls, layerId } of FAA_CLASSES) {
+    try {
+      const params = new URLSearchParams({
+        where: '1=1',
+        outFields: '*',
+        f: 'geojson',
+        resultRecordCount: '5000'
+      });
+      const url = `${FAA_AIRSPACE_URL}/${layerId}/query?${params.toString()}`;
+      const resp = await fetch(url);
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const geojson = await resp.json();
+      if (!geojson.features || geojson.features.length === 0) continue;
+
+      // Normalize feature properties for consistency with checkAirspace
+      for (const feat of geojson.features) {
+        const p = feat.properties || {};
+        feat.properties = {
+          ...p,
+          cls: cls,
+          name: p.NAME || p.IDENT || p.name || p.ident || '',
+          id: p.IDENT || p.ident || p.id || ''
+        };
+      }
+
+      airspaceGeoJSON[cls] = geojson;
+
+      // Update existing map source in-place, or add new source+layers for Class E
+      const srcId = `airspace-${cls}`;
+      const src = map.getSource(srcId);
+      if (src) {
+        src.setData(geojson);
+      } else {
+        // New class (e.g. Class E) — add source and layers
+        const style = AIRSPACE_STYLES[cls];
+        if (!style) continue;
+        map.addSource(srcId, { type: 'geojson', data: geojson });
+        map.addLayer({
+          id: `${srcId}-fill`, type: 'fill', source: srcId,
+          paint: { 'fill-color': style.fill }
+        });
+        const linePaint = { 'line-color': style.stroke, 'line-width': style.strokeW, 'line-opacity': 0.7 };
+        map.addLayer({
+          id: `${srcId}-line`, type: 'line', source: srcId,
+          paint: linePaint
+        });
+      }
+      successCount++;
+    } catch (e) {
+      console.warn(`Could not load Class ${cls} from FAA:`, e.message);
+    }
+  }
+
+  // Update data source indicator
+  const dot = document.querySelector('#data-source .dot');
+  const label = document.getElementById('data-source-text');
+  if (successCount > 0) {
+    liveDataLoaded = true;
+    dot.className = 'dot live';
+    const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    label.textContent = `FAA Live \u00B7 ${time}`;
+  } else {
+    dot.className = 'dot offline';
+    label.textContent = 'Offline data';
+  }
+}
+
 // ── Init Map ──
 function initMap() {
   map = new maplibregl.Map({
@@ -475,9 +575,16 @@ function initMap() {
   map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
 
   map.on('load', () => {
+    // Load static fallback data immediately
     buildAirspacePolygons();
     addAirspaceLayers();
     document.getElementById('loading-overlay').classList.add('hidden');
+
+    // Fetch live FAA data (replaces static circles with real polygons)
+    loadFAAData();
+
+    // Refresh live data periodically
+    setInterval(loadFAAData, REFRESH_INTERVAL_MS);
 
     map.on('click', e => {
       checkAndUpdate(e.lngLat.lng, e.lngLat.lat);
