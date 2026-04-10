@@ -278,13 +278,8 @@ width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
 //  Live FAA airspace data with static fallback
 // ──────────────────────────────────────────────────
 
-const FAA_AIRSPACE_URL = 'https://services6.arcgis.com/ssFJjBXIUyZDrSYZ/arcgis/rest/services/US_Airspace/FeatureServer';
-const FAA_CLASSES = [
-  { cls: 'B', layerId: 0 },
-  { cls: 'C', layerId: 1 },
-  { cls: 'D', layerId: 2 },
-  { cls: 'E', layerId: 3 },
-];
+const FAA_AIRSPACE_URL = 'https://services6.arcgis.com/ssFJjBXIUyZDrSYZ/arcgis/rest/services/Airspace/FeatureServer';
+const FAA_LAYER_ID = 0;
 const REFRESH_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
 
 let map, userMarker = null;
@@ -471,73 +466,96 @@ function checkAndUpdate(lng, lat) {
   updateStatus(result, lat, lng);
 }
 
+// ── Detect airspace class from feature properties ──
+function detectClass(props) {
+  // Try explicit CLASS field variants
+  const raw = (props.CLASS || props.ICAO_CLASS || props.LOCAL_TYPE || props.class || '').toString().trim();
+  if (raw && /^[BCDE]/i.test(raw)) return raw[0].toUpperCase();
+
+  // Fallback: extract from NAME field (e.g. "BOSTON CLASS B AREA A")
+  const name = props.NAME || props.name || '';
+  const m = name.match(/CLASS\s+([BCDE])/i);
+  if (m) return m[1].toUpperCase();
+
+  return null;
+}
+
 // ── Load live FAA airspace data ──
 async function loadFAAData() {
-  let successCount = 0;
-  for (const { cls, layerId } of FAA_CLASSES) {
-    try {
-      const params = new URLSearchParams({
-        where: '1=1',
-        outFields: '*',
-        f: 'geojson',
-        resultRecordCount: '5000'
-      });
-      const url = `${FAA_AIRSPACE_URL}/${layerId}/query?${params.toString()}`;
-      const resp = await fetch(url);
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      const geojson = await resp.json();
-      if (!geojson.features || geojson.features.length === 0) continue;
+  try {
+    const params = new URLSearchParams({
+      where: '1=1',
+      outFields: '*',
+      f: 'geojson',
+      resultRecordCount: '5000'
+    });
+    const url = `${FAA_AIRSPACE_URL}/${FAA_LAYER_ID}/query?${params.toString()}`;
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const geojson = await resp.json();
+    if (geojson.error) throw new Error(geojson.error.message || 'Service error');
+    if (!geojson.features || geojson.features.length === 0) throw new Error('No features');
 
-      // Normalize feature properties for consistency with checkAirspace
-      for (const feat of geojson.features) {
-        const p = feat.properties || {};
-        feat.properties = {
-          ...p,
-          cls: cls,
-          name: p.NAME || p.IDENT || p.name || p.ident || '',
-          id: p.IDENT || p.ident || p.id || ''
-        };
-      }
+    // Group features by airspace class
+    const groups = {};
+    for (const feat of geojson.features) {
+      const p = feat.properties || {};
+      const cls = detectClass(p);
+      if (!cls) continue;
 
-      airspaceGeoJSON[cls] = geojson;
+      feat.properties = {
+        ...p,
+        cls: cls,
+        name: p.NAME || p.AIRSPACE || p.IDENT || p.name || p.ident || '',
+        id: p.IDENT || p.ident || p.id || ''
+      };
 
-      // Update existing map source in-place, or add new source+layers for Class E
+      if (!groups[cls]) groups[cls] = [];
+      groups[cls].push(feat);
+    }
+
+    // Update map sources per class
+    let successCount = 0;
+    for (const cls of Object.keys(groups)) {
+      const fc = { type: 'FeatureCollection', features: groups[cls] };
+      airspaceGeoJSON[cls] = fc;
+
       const srcId = `airspace-${cls}`;
       const src = map.getSource(srcId);
       if (src) {
-        src.setData(geojson);
+        src.setData(fc);
       } else {
-        // New class (e.g. Class E) — add source and layers
         const style = AIRSPACE_STYLES[cls];
         if (!style) continue;
-        map.addSource(srcId, { type: 'geojson', data: geojson });
+        map.addSource(srcId, { type: 'geojson', data: fc });
         map.addLayer({
           id: `${srcId}-fill`, type: 'fill', source: srcId,
           paint: { 'fill-color': style.fill }
         });
-        const linePaint = { 'line-color': style.stroke, 'line-width': style.strokeW, 'line-opacity': 0.7 };
         map.addLayer({
           id: `${srcId}-line`, type: 'line', source: srcId,
-          paint: linePaint
+          paint: { 'line-color': style.stroke, 'line-width': style.strokeW, 'line-opacity': 0.7 }
         });
       }
       successCount++;
-    } catch (e) {
-      console.warn(`Could not load Class ${cls} from FAA:`, e.message);
     }
-  }
 
-  // Update data source indicator
-  const dot = document.querySelector('#data-source .dot');
-  const label = document.getElementById('data-source-text');
-  if (successCount > 0) {
-    liveDataLoaded = true;
-    dot.className = 'dot live';
-    const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    label.textContent = `FAA Live \u00B7 ${time}`;
-  } else {
-    dot.className = 'dot offline';
-    label.textContent = 'Offline data';
+    // Update data source indicator
+    const dot = document.querySelector('#data-source .dot');
+    const label = document.getElementById('data-source-text');
+    if (successCount > 0) {
+      liveDataLoaded = true;
+      dot.className = 'dot live';
+      const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      label.textContent = `FAA Live \u00B7 ${time}`;
+    } else {
+      dot.className = 'dot offline';
+      label.textContent = 'Offline data';
+    }
+  } catch (e) {
+    console.warn('Could not load FAA airspace data:', e.message);
+    document.querySelector('#data-source .dot').className = 'dot offline';
+    document.getElementById('data-source-text').textContent = 'Offline data';
   }
 }
 
